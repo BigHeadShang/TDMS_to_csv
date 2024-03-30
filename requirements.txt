@@ -1,0 +1,6 @@
+pandas==2.2.1
+numpy==1.26.4
+librosa==0.10.1 
+scipy==1.9.1 
+tftb==0.1.4 
+npTDMS==1.9.0
