@@ -25,6 +25,16 @@ Ensure all your TDMS files are located in the same directory, e.g., `/path/to/td
 
 Run the script from the command line, specifying the path to the TDMS file(s), output path, whether to merge CSV files, and the transformation to apply, along with the specific channels:
 
+## Results
+
+After executing the command, the converted CSV files and the 2D images from the applied transformation on specified channels will be available in the specified output directory.
+
+You can adjust the `--algorithm` parameter in the command line to choose different data transformation algorithms: `1` for Mel Spectrogram, `3` for Continuous Wavelet Transform, `4` for Wigner-Ville Distribution, and `5` for the Simplified S-Transform.
+
+## Developer
+
+- Zhanhao Shang
+
 ```bash
 python convert_to_csv.py /path/to/tdms/files -o /path/to/output --merge true --transform true --channels 'CH0' 'CH1' --algorithm 2
 
@@ -37,12 +47,4 @@ python convert_to_csv.py /path/to/tdms/files -o /path/to/output --merge true --t
 - `--channels '/DAQ/CH0' '/DAQ/CH1'`: Specifies the channels to transform. List any of `'/DAQ/CH0'` to `'/DAQ/CH13'`.
 - `--algorithm 2`: Specifies the transformation algorithm to use, where `2` is for STFT.
 
-### Results
 
-After executing the command, the converted CSV files and the 2D images from the applied transformation on specified channels will be available in the specified output directory.
-
-You can adjust the `--algorithm` parameter in the command line to choose different data transformation algorithms: `1` for Mel Spectrogram, `3` for Continuous Wavelet Transform, `4` for Wigner-Ville Distribution, and `5` for the Simplified S-Transform.
-
-### Developer
-
-- Zhanhao Shang
