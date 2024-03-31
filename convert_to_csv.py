@@ -10,6 +10,7 @@ from scipy.signal import spectrogram
 from tftb.processing import WignerVilleDistribution
 from datetime import datetime
 from nptdms import TdmsFile
+import concurrent.futures
 
 def sanitize_filename(filename):
     """Remove spaces from the filename."""
@@ -27,40 +28,43 @@ def convert_tdms_to_csv(tdms_path, output_folder):
     return csv_path
 
 def merge_csv_files(files, output_folder, timestamp):
-    """Merge all CSV files into a single file, removing the header from subsequent files,
-    and rename headers as CH1, CH2, ..., CHn based on the number of columns."""
-    
+    """Merge all CSV files into a single file, standardizing column headers."""
     dataframes = []
     for i, file in enumerate(files):
         try:
-            # 尝试读取CSV文件，如果文件为空，则跳过
-            df = pd.read_csv(file, skiprows=1 if i > 0 else 0)
+            df = pd.read_csv(file)
+
+            # 检查是否为空
             if df.empty:
                 print(f"Skipping empty file: {file}")
                 continue
+
+            # 重命名列以确保一致性，例如使用通用列名：CH1, CH2, ..., CHn
+            column_count = len(df.columns)
+            standardized_columns = ['CH' + str(i) for i in range(column_count)]
+            df.columns = standardized_columns
+
             dataframes.append(df)
+            print(f"Processed file: {file} | Columns = {len(df.columns)}, Rows = {len(df)}")
         except pd.errors.EmptyDataError:
             print(f"No data in {file}, skipping.")
         except Exception as e:
             print(f"Error reading {file}: {e}")
             continue
-    
-    # 如果没有有效的CSV文件，则返回而不创建合并文件
-    if not dataframes:
+
+    # 合并所有DataFrame
+    if dataframes:
+        merged_df = pd.concat(dataframes, ignore_index=True)
+        print(f"After Processed file: {file} | Columns = {len(merged_df.columns)}, Rows = {len(merged_df)}")
+        # 再次检查列名一致性，此时所有DataFrame应该有相同的列名
+        merged_filename = os.path.join(output_folder, f"merge_csv_{timestamp}.csv")
+        merged_df.to_csv(merged_filename, index=False)
+        print(f"Merged CSV files into {merged_filename}")
+        return merged_filename
+    else:
         print("No valid CSV files to merge.")
-        return
+        return None
 
-    merged_df = pd.concat(dataframes)
-    
-    # 重命名列标题为 CH1, CH2, ..., CHn
-    num_columns = len(merged_df.columns)
-    new_headers = ['CH' + str(i + 1) for i in range(num_columns)]
-    merged_df.columns = new_headers
-
-    merged_filename = os.path.join(output_folder, f'merge_csv_{timestamp}.csv')
-    merged_df.to_csv(merged_filename, index=False)
-    print(f'Merged CSV files into {merged_filename}')
-    return merged_filename
 
 def stft_transform(csv_file, channel):
     """Perform Short-Time Fourier Transform on selected channel."""
@@ -150,24 +154,25 @@ def perform_transformation(merge_csv_path, channels, algorithm):
         else:
             print(f"Algorithm {algorithm} not implemented for {channel}.")
 
-
 def process_folder(folder_path, output_folder, should_merge, transform, channels, algorithm):
-    """Process all TDMS files in a given folder, merge the converted CSV files, and optionally transform them."""
-    csv_files = []
-    for filename in sorted(os.listdir(folder_path)):
-        if filename.lower().endswith('.tdms'):
-            sanitized_filename = sanitize_filename(filename)
-            tdms_path = os.path.join(folder_path, sanitized_filename)
-            before_path = os.path.join(folder_path, filename)
-            os.rename(before_path, tdms_path)
-            csv_path = convert_tdms_to_csv(tdms_path, output_folder)
-            csv_files.append(csv_path)
+    """Process all TDMS files in a given folder concurrently, merge the converted CSV files, and optionally transform them."""
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future_to_csv = {executor.submit(convert_tdms_to_csv, os.path.join(folder_path, filename), output_folder): filename
+                         for filename in sorted(os.listdir(folder_path))
+                         if filename.lower().endswith('.tdms')}
+
+        csv_files = []
+        for future in concurrent.futures.as_completed(future_to_csv):
+            csv_path = future.result()
+            if csv_path:
+                csv_files.append(csv_path)
+                print(f"Converted: {csv_path}")
 
     merged_csv_path = ""
-    if should_merge:
+    if should_merge and csv_files:
         csv_files_sorted = sorted(csv_files, key=lambda x: os.path.getmtime(x))
         merged_csv_path = merge_csv_files(csv_files_sorted, output_folder, datetime.now().strftime('%Y%m%d%H%M'))
-    
+
     if transform and channels and algorithm:
         if should_merge and merged_csv_path:
             perform_transformation(merged_csv_path, channels, algorithm)
