@@ -29,11 +29,32 @@ def convert_tdms_to_csv(tdms_path, output_folder):
 def merge_csv_files(files, output_folder, timestamp):
     """Merge all CSV files into a single file, removing the header from subsequent files,
     and rename headers as CH1, CH2, ..., CHn based on the number of columns."""
-    merged_df = pd.concat([pd.read_csv(file, skiprows=1 if i > 0 else 0) for i, file in enumerate(files)])
+    
+    dataframes = []
+    for i, file in enumerate(files):
+        try:
+            # 尝试读取CSV文件，如果文件为空，则跳过
+            df = pd.read_csv(file, skiprows=1 if i > 0 else 0)
+            if df.empty:
+                print(f"Skipping empty file: {file}")
+                continue
+            dataframes.append(df)
+        except pd.errors.EmptyDataError:
+            print(f"No data in {file}, skipping.")
+        except Exception as e:
+            print(f"Error reading {file}: {e}")
+            continue
+    
+    # 如果没有有效的CSV文件，则返回而不创建合并文件
+    if not dataframes:
+        print("No valid CSV files to merge.")
+        return
+
+    merged_df = pd.concat(dataframes)
     
     # 重命名列标题为 CH1, CH2, ..., CHn
     num_columns = len(merged_df.columns)
-    new_headers = ['CH' + str(i) for i in range(num_columns)]
+    new_headers = ['CH' + str(i + 1) for i in range(num_columns)]
     merged_df.columns = new_headers
 
     merged_filename = os.path.join(output_folder, f'merge_csv_{timestamp}.csv')
